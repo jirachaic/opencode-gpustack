@@ -1,0 +1,16 @@
+{
+  "$schema": "https://jsr.io/schema/config-file.v1.json",
+  "name": "@jirachaic/opencode-gpustack",
+  "version": "0.1.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "imports": {
+    "@opencode-ai/plugin": "npm:@opencode-ai/plugin@^1.18.21"
+  },
+  "publish": {
+    "include": ["src/**/*.ts", "README.md", "LICENSE", "CHANGELOG.md"]
+  }
+}

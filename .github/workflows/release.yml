@@ -25,5 +25,19 @@ jobs:
       - run: bun run check
       - run: bun run build
       - run: bun run test:package
+      - run: bun run check:package-versions
       - run: bun run check:release-name
       - run: npm publish --provenance --access public
+
+  jsr:
+    runs-on: ubuntu-latest
+    environment: jsr
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run test:jsr
+      - run: bunx jsr publish --provenance

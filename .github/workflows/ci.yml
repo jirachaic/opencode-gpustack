@@ -19,6 +19,7 @@ jobs:
       - run: bun run check
       - run: bun run build
       - run: bun run test:package
+      - run: bun run test:jsr
 
   opencode-compatibility:
     runs-on: ubuntu-latest

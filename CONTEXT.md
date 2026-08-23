@@ -14,3 +14,11 @@
 ## Compatibility
 
 The minimum supported OpenCode release is 1.18.21. Custom providers must be populated through the plugin `config` hook because provider-model hooks do not discover unknown custom provider IDs in that release.
+
+## Distribution
+
+- npm `opencode-gpustack` is the canonical OpenCode plugin and CLI package.
+- JSR `@jirachaic/opencode-gpustack` exposes the TypeScript plugin and type
+  entrypoints for programmatic imports.
+- Both registry manifests must use the same version and are published from the
+  same GitHub release.

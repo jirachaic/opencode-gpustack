@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add JSR packaging and synchronized npm/JSR release automation.
+- Add repository guidance for coding agents.
+
 All notable changes to this project will be documented here.
 
 ## 0.1.0 - Unreleased

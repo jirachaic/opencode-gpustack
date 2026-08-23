@@ -12,6 +12,13 @@ Only running LLM routes visible to the API key are imported. Embedding, rerankin
 
 ## Install
 
+Install the OpenCode plugin and CLI from npm. OpenCode resolves plugin package
+names through npm:
+
+```bash
+bun add -g opencode-gpustack
+```
+
 Add the plugin to `~/.config/opencode/opencode.json`:
 
 ```json
@@ -61,6 +68,20 @@ bunx opencode-gpustack init \
 
 Run `/models` in OpenCode and select a model under `gpustack-bkk`.
 
+The TypeScript library entrypoints are also published on JSR as
+`@jirachaic/opencode-gpustack`:
+
+```bash
+bunx jsr add @jirachaic/opencode-gpustack
+```
+
+```ts
+import GPUStackPlugin from "@jirachaic/opencode-gpustack";
+```
+
+The JSR package is for programmatic TypeScript imports. Use the npm package for
+OpenCode plugin registration and the `opencode-gpustack` CLI.
+
 ## CLI
 
 ```text
@@ -108,6 +129,7 @@ Set `OPENCODE_GPUSTACK_CONFIG` to use a different configuration path. Standard `
 bun install
 bun run check
 bun run build
+bun run test:jsr
 bun pm pack --dry-run
 ```
 

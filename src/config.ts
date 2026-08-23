@@ -279,7 +279,9 @@ export function validateConfig(value: unknown): GPUStackConfig {
   return { version: 1, profiles, discovery: { timeoutMs } };
 }
 
-export async function loadConfig(path = configPath()): Promise<GPUStackConfig> {
+export async function loadConfig(
+  path: string = configPath(),
+): Promise<GPUStackConfig> {
   let contents: string;
   try {
     contents = await readFile(path, "utf8");
@@ -298,7 +300,7 @@ export async function loadConfig(path = configPath()): Promise<GPUStackConfig> {
   }
 }
 
-export async function loadPluginConfig(path = configPath()): Promise<{
+export async function loadPluginConfig(path: string = configPath()): Promise<{
   config: GPUStackConfig;
   warnings: string[];
 }> {

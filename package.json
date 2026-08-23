@@ -35,7 +35,7 @@
   ],
   "scripts": {
     "build": "bun build ./src/index.ts ./src/cli.ts ./src/types.ts --outdir ./dist --target bun --format esm && tsc -p tsconfig.build.json",
-    "check": "bun run typecheck && bun run lint && bun test",
+    "check": "bun run check:package-versions && bun run typecheck && bun run lint && bun test",
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "bun test",
@@ -43,6 +43,8 @@
     "test:opencode": "bun run build && bun test ./tests/opencode.e2e.ts",
     "test:package": "bun run build && bun ./scripts/package-smoke.ts",
     "check:release-name": "bun ./scripts/check-release-name.ts",
+    "check:package-versions": "bun ./scripts/check-package-versions.ts",
+    "test:jsr": "bun run check:package-versions && bunx jsr publish --dry-run --allow-dirty",
     "typecheck": "tsc --noEmit",
     "prepack": "bun run check && bun run build"
   },
