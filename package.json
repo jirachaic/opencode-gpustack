@@ -25,7 +25,7 @@
     }
   },
   "bin": {
-    "opencode-gpustack": "./dist/cli.js"
+    "opencode-gpustack": "dist/cli.js"
   },
   "files": [
     "dist",
