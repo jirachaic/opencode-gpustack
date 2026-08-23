@@ -47,6 +47,12 @@ describe("OpenCode plugin integration", () => {
             baseURL: "https://two.example/v1",
             apiKeyEnv: "GPUSTACK_TWO_KEY",
           },
+          {
+            id: "Invalid/Profile",
+            name: "Invalid",
+            baseURL: "https://invalid.example/v1",
+            apiKeyEnv: "INVALID_KEY",
+          },
         ],
         discovery: { timeoutMs: 100 },
       }),
@@ -64,7 +70,9 @@ describe("OpenCode plugin integration", () => {
       };
       expect(provider.models.qwen3.name).toBe("qwen3");
       expect(provider.options.apiKey).toBe("one-key");
+      expect(JSON.stringify(provider.options)).not.toContain("one-key");
       expect(config.provider?.["gpustack-two"]).toBeUndefined();
+      expect(config.provider?.["gpustack-Invalid/Profile"]).toBeUndefined();
     } finally {
       server.stop(true);
     }
@@ -94,6 +102,11 @@ describe("OpenCode plugin integration", () => {
               name: "Local",
               baseURL: `http://127.0.0.1:${server.port}`,
               apiKeyEnv: "GPUSTACK_CLI_KEY",
+              modelOverrides: {
+                "qwen-cli": {
+                  headers: { Authorization: "Bearer must-not-print" },
+                },
+              },
             },
           ],
         }),
@@ -118,6 +131,7 @@ describe("OpenCode plugin integration", () => {
       ]);
       expect(stderr).toBe("");
       expect(exitCode).toBe(0);
+      expect(stdout).not.toContain("must-not-print");
       expect(JSON.parse(stdout)[0].models[0].id).toBe("qwen-cli");
     } finally {
       server.stop(true);

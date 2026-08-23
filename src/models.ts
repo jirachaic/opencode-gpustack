@@ -8,7 +8,7 @@ import type {
 
 const MODALITIES = new Set(["text", "audio", "image", "video", "pdf"]);
 
-function object(value: unknown): Record<string, unknown> | undefined {
+function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
@@ -21,7 +21,7 @@ function positiveNumber(...values: unknown[]): number | undefined {
   );
 }
 
-function strings(value: unknown): string[] | undefined {
+function asStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const values = value.filter(
     (item): item is string => typeof item === "string",
@@ -30,40 +30,40 @@ function strings(value: unknown): string[] | undefined {
 }
 
 function modalities(value: unknown): ModelModalities | undefined {
-  const raw = object(value);
+  const raw = asRecord(value);
   if (!raw) return undefined;
-  const input = strings(raw.input_modalities ?? raw.input)?.filter((item) =>
-    MODALITIES.has(item),
+  const input = asStringArray(raw.input_modalities ?? raw.input)?.filter(
+    (item) => MODALITIES.has(item),
   ) as ModelModalities["input"];
-  const output = strings(raw.output_modalities ?? raw.output)?.filter((item) =>
-    MODALITIES.has(item),
+  const output = asStringArray(raw.output_modalities ?? raw.output)?.filter(
+    (item) => MODALITIES.has(item),
   ) as ModelModalities["output"];
   return input?.length || output?.length ? { input, output } : undefined;
 }
 
 type ModelModalities = NonNullable<OpenCodeModel["modalities"]>;
 
-function mergeModel(
+export function applyModelOverride(
   base: OpenCodeModel,
   override: ModelOverride | undefined,
 ): OpenCodeModel {
   if (!override) return base;
-  return {
+  const { limit, ...overrideWithoutLimit } = override;
+  const merged: OpenCodeModel = {
     ...base,
-    ...override,
-    limit: override.limit
-      ? ({ ...base.limit, ...override.limit } as OpenCodeModel["limit"])
-      : base.limit,
-    modalities: override.modalities
-      ? { ...base.modalities, ...override.modalities }
-      : base.modalities,
-    options: override.options
-      ? { ...base.options, ...override.options }
-      : base.options,
-    headers: override.headers
-      ? { ...base.headers, ...override.headers }
-      : base.headers,
+    ...overrideWithoutLimit,
+    id: base.id,
   };
+  if (limit) {
+    merged.limit = { ...base.limit, ...limit } as OpenCodeModel["limit"];
+  }
+  if (override.modalities)
+    merged.modalities = { ...base.modalities, ...override.modalities };
+  if (override.options)
+    merged.options = { ...base.options, ...override.options };
+  if (override.headers)
+    merged.headers = { ...base.headers, ...override.headers };
+  return merged;
 }
 
 export function matchesGlob(value: string, pattern: string): boolean {
@@ -88,11 +88,11 @@ export function mapModel(
   model: GPUStackModelResponse,
   override?: ModelOverride,
 ): DiscoveredModel {
-  const meta = object(model.meta) ?? {};
-  const tokenLimits = object(meta.token_limits) ?? {};
-  const features = object(meta.features) ?? {};
-  const tools = object(features.tools) ?? {};
-  const capabilities = strings(meta.capabilities) ?? [];
+  const meta = asRecord(model.meta) ?? {};
+  const tokenLimits = asRecord(meta.token_limits) ?? {};
+  const features = asRecord(meta.features) ?? {};
+  const tools = asRecord(features.tools) ?? {};
+  const capabilities = asStringArray(meta.capabilities) ?? [];
   const mappedModalities = modalities(meta.modalities);
   const context = positiveNumber(
     tokenLimits.context_window,
@@ -107,6 +107,11 @@ export function mapModel(
     tokenLimits.max_input_token_length,
     meta.max_input_tokens,
   );
+  const discoveredLimit = {
+    ...(context ? { context } : {}),
+    ...(input ? { input } : {}),
+    ...(output ? { output } : {}),
+  };
   const config: OpenCodeModel = {
     id: model.id,
     name: typeof meta.name === "string" ? meta.name : model.id,
@@ -122,28 +127,59 @@ export function mapModel(
     config.tool_call = true;
   if (features.reasoning === true || capabilities.includes("reasoning"))
     config.reasoning = true;
-  return { id: model.id, config: mergeModel(config, override) };
+  return applyDiscoveredModelOverride(
+    {
+      id: model.id,
+      config,
+      ...(Object.keys(discoveredLimit).length ? { discoveredLimit } : {}),
+    },
+    override,
+  );
+}
+
+export function applyDiscoveredModelOverride(
+  model: DiscoveredModel,
+  override: ModelOverride | undefined,
+): DiscoveredModel {
+  if (!override) return model;
+  const combinedLimit = { ...model.discoveredLimit, ...override.limit };
+  const { limit: _partialLimit, ...rest } = override;
+  const completedOverride: ModelOverride =
+    combinedLimit.context && combinedLimit.output
+      ? {
+          ...rest,
+          limit: {
+            context: combinedLimit.context,
+            output: combinedLimit.output,
+            ...(combinedLimit.input ? { input: combinedLimit.input } : {}),
+          },
+        }
+      : rest;
+  return {
+    ...model,
+    config: applyModelOverride(model.config, completedOverride),
+  };
 }
 
 export function parseModels(
   payload: unknown,
   profile: GPUStackProfile,
 ): DiscoveredModel[] {
-  const envelope = object(payload);
+  const envelope = asRecord(payload);
   if (!envelope || !Array.isArray(envelope.data))
     throw new Error("GPUStack response must contain a data array");
   const seen = new Set<string>();
   const models: DiscoveredModel[] = [];
   for (const item of envelope.data) {
-    const raw = object(item);
+    const raw = asRecord(item);
     if (!raw || typeof raw.id !== "string" || raw.id.trim() === "")
       throw new Error("GPUStack returned a model without a valid id");
     const id = raw.id;
     if (seen.has(id))
       throw new Error(`GPUStack returned duplicate model id: ${id}`);
     seen.add(id);
-    const meta = object(raw.meta);
-    const categories = strings(meta?.categories ?? raw.categories);
+    const meta = asRecord(raw.meta);
+    const categories = asStringArray(meta?.categories ?? raw.categories);
     if (categories && !categories.includes("llm")) continue;
     if (!isIncluded(id, profile.include ?? ["*"], profile.exclude ?? []))
       continue;

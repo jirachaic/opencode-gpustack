@@ -1,10 +1,15 @@
 import type { Plugin } from "@opencode-ai/plugin";
-import { loadConfig } from "./config";
+import { loadPluginConfig } from "./config";
 import { resolveProfile } from "./discovery";
 import { insecurePublicHttpWarning, safeError } from "./security";
 import type { GPUStackConfig, OpenCodeModel } from "./types";
 
-export { loadConfig, normalizeBaseURL, validateConfig } from "./config";
+export {
+  loadConfig,
+  loadPluginConfig,
+  normalizeBaseURL,
+  validateConfig,
+} from "./config";
 export { discover, modelsURL, resolveProfile } from "./discovery";
 export * from "./types";
 
@@ -18,11 +23,29 @@ function providerModels(
   return Object.fromEntries(models.map((model) => [model.id, model.config]));
 }
 
+function providerOptions(
+  baseURL: string,
+  apiKey: string,
+): Record<string, unknown> {
+  const options = { baseURL, apiKey };
+  Object.defineProperty(options, "toJSON", {
+    // Bun 1.3 only honors an enumerable toJSON property. The provider ignores
+    // this extra option, while OpenCode's debug serialization stays redacted.
+    enumerable: true,
+    value: () => ({ baseURL, apiKey: "[REDACTED]" }),
+  });
+  return options;
+}
+
 export const GPUStackPlugin: Plugin = async () => ({
   config: async (input) => {
     let pluginConfig: GPUStackConfig;
     try {
-      pluginConfig = await loadConfig();
+      const loaded = await loadPluginConfig();
+      pluginConfig = loaded.config;
+      for (const warning of loaded.warnings) {
+        console.warn(`[opencode-gpustack] ${warning}; profile skipped`);
+      }
     } catch (error) {
       console.warn(`[opencode-gpustack] ${safeError(error)}`);
       return;
@@ -65,10 +88,10 @@ export const GPUStackPlugin: Plugin = async () => ({
       providers[providerID] = {
         npm: "@ai-sdk/openai-compatible",
         name: profile.name,
-        options: {
-          baseURL: profile.baseURL,
-          apiKey: process.env[profile.apiKeyEnv],
-        },
+        options: providerOptions(
+          profile.baseURL,
+          process.env[profile.apiKeyEnv] as string,
+        ),
         models: providerModels(result.value.models),
       };
     });

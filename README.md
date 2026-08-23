@@ -90,6 +90,8 @@ GPUStack metadata is mapped when available. Override it when a backend does not 
 }
 ```
 
+OpenCode requires both `context` and `output` before it accepts a model limit block. If GPUStack reports only one value, the plugin preserves it in discovery/cache metadata and `doctor` warns; provide the missing value in `modelOverrides` to complete the pair.
+
 Include and exclude entries are anchored glob patterns. Exclusions take precedence.
 
 ## Failure behavior and security

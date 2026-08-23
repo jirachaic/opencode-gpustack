@@ -1,5 +1,5 @@
 import { readCache, writeCache } from "./cache";
-import { parseModels } from "./models";
+import { applyDiscoveredModelOverride, parseModels } from "./models";
 import { safeError } from "./security";
 import type {
   DiscoveredModel,
@@ -19,6 +19,14 @@ export type DiscoveryOptions = {
 export class DiscoveryError extends Error {
   constructor(
     message: string,
+    readonly kind:
+      | "configuration"
+      | "authentication"
+      | "client"
+      | "server"
+      | "network"
+      | "timeout"
+      | "contract",
     readonly status?: number,
   ) {
     super(message);
@@ -42,6 +50,7 @@ export async function discover(
   if (!apiKey)
     throw new DiscoveryError(
       `Missing API key environment variable: ${profile.apiKeyEnv}`,
+      "configuration",
     );
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs);
@@ -56,19 +65,42 @@ export async function discover(
         signal: controller.signal,
       },
     );
-    if (!response.ok)
+    if (!response.ok) {
+      const kind =
+        response.status === 401 || response.status === 403
+          ? "authentication"
+          : response.status >= 500 ||
+              response.status === 408 ||
+              response.status === 429
+            ? "server"
+            : "client";
       throw new DiscoveryError(
         `GPUStack returned HTTP ${response.status}`,
+        kind,
         response.status,
       );
-    return parseModels(await response.json(), profile);
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+      return parseModels(payload, profile);
+    } catch (error) {
+      throw new DiscoveryError(
+        `GPUStack returned an invalid model payload: ${safeError(error)}`,
+        "contract",
+      );
+    }
   } catch (error) {
     if (error instanceof DiscoveryError) throw error;
     if ((error as Error).name === "AbortError")
       throw new DiscoveryError(
         `GPUStack discovery timed out after ${options.timeoutMs}ms`,
+        "timeout",
       );
-    throw new DiscoveryError(`GPUStack discovery failed: ${safeError(error)}`);
+    throw new DiscoveryError(
+      `GPUStack discovery failed: ${safeError(error)}`,
+      "network",
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -79,18 +111,37 @@ export async function resolveProfile(
   options: DiscoveryOptions,
 ): Promise<ResolvedProfile> {
   try {
-    const models = await discover(profile, options);
-    const snapshot = await writeCache(profile, models, options.env);
+    const profileWithoutOverrides = { ...profile, modelOverrides: {} };
+    const discovered = await discover(profileWithoutOverrides, options);
+    const snapshot = await writeCache(profile, discovered, options.env);
+    const models = applyOverrides(discovered, profile);
     return { profile, models, source: "live", fetchedAt: snapshot.fetchedAt };
   } catch (error) {
+    if (
+      !(error instanceof DiscoveryError) ||
+      !["network", "timeout", "server"].includes(error.kind)
+    )
+      throw error;
     const snapshot = await readCache(profile, options.env);
     if (!snapshot) throw error;
     return {
       profile,
-      models: snapshot.models,
+      models: applyOverrides(snapshot.models, profile),
       source: "cache",
       fetchedAt: snapshot.fetchedAt,
       warning: `${safeError(error)}; using cached models from ${snapshot.fetchedAt}`,
     };
   }
+}
+
+function applyOverrides(
+  models: DiscoveredModel[],
+  profile: GPUStackProfile,
+): DiscoveredModel[] {
+  return models.map((model) => {
+    return applyDiscoveredModelOverride(
+      model,
+      profile.modelOverrides?.[model.id],
+    );
+  });
 }

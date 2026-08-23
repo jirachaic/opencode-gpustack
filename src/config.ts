@@ -58,10 +58,52 @@ function validateOverride(
     throw new Error(`${field} must be an object`);
   }
   const override = value as Record<string, unknown>;
+  const allowed = new Set([
+    "name",
+    "family",
+    "attachment",
+    "reasoning",
+    "temperature",
+    "tool_call",
+    "limit",
+    "modalities",
+    "status",
+    "options",
+    "headers",
+  ]);
+  for (const key of Object.keys(override)) {
+    if (!allowed.has(key)) throw new Error(`${field}.${key} is not supported`);
+  }
+  for (const key of ["name", "family"] as const) {
+    if (override[key] !== undefined && typeof override[key] !== "string") {
+      throw new Error(`${field}.${key} must be a string`);
+    }
+  }
+  for (const key of [
+    "attachment",
+    "reasoning",
+    "temperature",
+    "tool_call",
+  ] as const) {
+    if (override[key] !== undefined && typeof override[key] !== "boolean") {
+      throw new Error(`${field}.${key} must be a boolean`);
+    }
+  }
+  if (
+    override.status !== undefined &&
+    !["alpha", "beta", "deprecated", "active"].includes(String(override.status))
+  ) {
+    throw new Error(`${field}.status is invalid`);
+  }
   if (override.limit !== undefined) {
     const limit = override.limit as Record<string, unknown>;
-    if (!limit || typeof limit !== "object")
+    if (!limit || typeof limit !== "object" || Array.isArray(limit))
       throw new Error(`${field}.limit must be an object`);
+    for (const key of Object.keys(limit)) {
+      if (!["context", "input", "output"].includes(key)) {
+        throw new Error(`${field}.limit.${key} is not supported`);
+      }
+    }
     for (const key of ["context", "input", "output"] as const) {
       if (
         limit[key] !== undefined &&
@@ -70,10 +112,75 @@ function validateOverride(
         throw new Error(`${field}.limit.${key} must be a positive number`);
       }
     }
+    if (
+      limit.context === undefined &&
+      limit.input === undefined &&
+      limit.output === undefined
+    ) {
+      throw new Error(`${field}.limit must contain at least one limit`);
+    }
+  }
+  if (override.modalities !== undefined) {
+    const modalities = override.modalities as Record<string, unknown>;
+    if (
+      !modalities ||
+      typeof modalities !== "object" ||
+      Array.isArray(modalities)
+    ) {
+      throw new Error(`${field}.modalities must be an object`);
+    }
+    for (const key of Object.keys(modalities)) {
+      if (!["input", "output"].includes(key))
+        throw new Error(`${field}.modalities.${key} is not supported`);
+    }
+    const allowedModalities = new Set([
+      "text",
+      "audio",
+      "image",
+      "video",
+      "pdf",
+    ]);
+    for (const key of ["input", "output"] as const) {
+      const entries = modalities[key];
+      if (
+        entries !== undefined &&
+        (!Array.isArray(entries) ||
+          entries.some((item) => !allowedModalities.has(String(item))))
+      ) {
+        throw new Error(
+          `${field}.modalities.${key} contains an invalid modality`,
+        );
+      }
+    }
+  }
+  if (
+    override.options !== undefined &&
+    (!override.options ||
+      typeof override.options !== "object" ||
+      Array.isArray(override.options))
+  ) {
+    throw new Error(`${field}.options must be an object`);
+  }
+  if (override.headers !== undefined) {
+    if (
+      !override.headers ||
+      typeof override.headers !== "object" ||
+      Array.isArray(override.headers)
+    ) {
+      throw new Error(`${field}.headers must be an object`);
+    }
+    if (
+      Object.values(override.headers).some((entry) => typeof entry !== "string")
+    ) {
+      throw new Error(`${field}.headers values must be strings`);
+    }
   }
 }
 
-function validateProfile(value: unknown, index: number): GPUStackProfile {
+export function validateProfile(
+  value: unknown,
+  index: number,
+): GPUStackProfile {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`profiles[${index}] must be an object`);
   }
@@ -189,6 +296,65 @@ export async function loadConfig(path = configPath()): Promise<GPUStackConfig> {
       throw new Error(`Invalid JSON in ${path}: ${error.message}`);
     throw error;
   }
+}
+
+export async function loadPluginConfig(path = configPath()): Promise<{
+  config: GPUStackConfig;
+  warnings: string[];
+}> {
+  let contents: string;
+  try {
+    contents = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`GPUStack configuration not found: ${path}`);
+    }
+    throw error;
+  }
+  let raw: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(contents);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Configuration must be an object");
+    }
+    raw = parsed as Record<string, unknown>;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid JSON in ${path}: ${message}`);
+  }
+  if (raw.version !== 1) throw new Error("Configuration version must be 1");
+  if (!Array.isArray(raw.profiles)) {
+    throw new Error("Configuration profiles must be an array");
+  }
+
+  const warnings: string[] = [];
+  const profiles: GPUStackProfile[] = [];
+  for (let index = 0; index < raw.profiles.length; index++) {
+    try {
+      profiles.push(validateProfile(raw.profiles[index], index));
+    } catch (error) {
+      warnings.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  const ids = new Set<string>();
+  for (const profile of profiles) {
+    if (ids.has(profile.id))
+      throw new Error(`Duplicate profile id: ${profile.id}`);
+    ids.add(profile.id);
+  }
+
+  const placeholder = {
+    id: "placeholder",
+    name: "Placeholder",
+    baseURL: "http://localhost/v1",
+    apiKeyEnv: "PLACEHOLDER",
+  };
+  const discovery = validateConfig({
+    version: 1,
+    profiles: profiles.length ? profiles : [placeholder],
+    discovery: raw.discovery,
+  }).discovery;
+  return { config: { version: 1, profiles, discovery }, warnings };
 }
 
 export async function writeJsonAtomic(

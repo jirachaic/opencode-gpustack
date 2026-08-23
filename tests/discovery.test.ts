@@ -2,7 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cachePath, readCache, writeCache } from "../src/cache";
+import {
+  cacheDirectory,
+  cachePath,
+  clearCaches,
+  readCache,
+  writeCache,
+} from "../src/cache";
 import { discover, modelsURL, resolveProfile } from "../src/discovery";
 import type { GPUStackProfile } from "../src/types";
 
@@ -96,5 +102,62 @@ describe("discovery and cache", () => {
     expect(
       await readCache({ ...profile, baseURL: "https://other.example/v1" }, env),
     ).toBeUndefined();
+  });
+
+  test("does not hide authentication or contract failures with cache", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opencode-gpustack-"));
+    directories.push(directory);
+    const env = { XDG_CACHE_HOME: directory, GPUSTACK_KEY: "bad-key" };
+    await writeCache(
+      profile,
+      [{ id: "cached", config: { name: "Cached" } }],
+      env,
+    );
+    await expect(
+      resolveProfile(profile, {
+        timeoutMs: 100,
+        env,
+        fetch: async () => new Response("unauthorized", { status: 401 }),
+      }),
+    ).rejects.toThrow("HTTP 401");
+    await expect(
+      resolveProfile(profile, {
+        timeoutMs: 100,
+        env,
+        fetch: async () => Response.json({ unexpected: [] }),
+      }),
+    ).rejects.toThrow("invalid model payload");
+  });
+
+  test("applies overrides after caching so secrets are never persisted", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opencode-gpustack-"));
+    directories.push(directory);
+    const env = { XDG_CACHE_HOME: directory, GPUSTACK_KEY: "secret" };
+    const configured = {
+      ...profile,
+      modelOverrides: {
+        qwen: { headers: { Authorization: "Bearer model-secret" } },
+      },
+    };
+    const result = await resolveProfile(configured, {
+      timeoutMs: 100,
+      env,
+      fetch: async () => Response.json({ data: [{ id: "qwen" }] }),
+    });
+    expect(result.models[0].config.headers?.Authorization).toContain(
+      "model-secret",
+    );
+    const cached = await readCache(configured, env);
+    expect(JSON.stringify(cached)).not.toContain("model-secret");
+  });
+
+  test("cache clear removes valid and corrupt snapshots", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "opencode-gpustack-"));
+    directories.push(directory);
+    const env = { XDG_CACHE_HOME: directory };
+    await writeCache(profile, [], env);
+    await Bun.write(join(cacheDirectory(env), "corrupt.json"), "not json");
+    expect(await clearCaches(env)).toBe(2);
+    expect(await readCache(profile, env)).toBeUndefined();
   });
 });

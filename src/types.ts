@@ -24,7 +24,9 @@ export type OpenCodeModel = {
   headers?: Record<string, string>;
 };
 
-export type ModelOverride = Partial<OpenCodeModel>;
+export type ModelOverride = Omit<Partial<OpenCodeModel>, "id" | "limit"> & {
+  limit?: Partial<ModelLimits>;
+};
 
 export type GPUStackProfile = {
   id: string;
@@ -58,6 +60,7 @@ export type GPUStackModelResponse = {
 export type DiscoveredModel = {
   id: string;
   config: OpenCodeModel;
+  discoveredLimit?: Partial<ModelLimits>;
 };
 
 export type CacheSnapshot = {

@@ -41,6 +41,7 @@ describe("model mapping", () => {
     );
     expect(model).toEqual({
       id: "qwen3",
+      discoveredLimit: { context: 32768, input: 30000, output: 4096 },
       config: {
         id: "qwen3",
         name: "Local Qwen",
@@ -66,6 +67,15 @@ describe("model mapping", () => {
       profile,
     );
     expect(models.map((model) => model.id)).toEqual(["qwen3"]);
+  });
+
+  test("combines partial discovered and overridden limits", () => {
+    const model = mapModel(
+      { id: "qwen3", meta: { token_limits: { context_window: 32768 } } },
+      { limit: { output: 2048 } },
+    );
+    expect(model.discoveredLimit).toEqual({ context: 32768 });
+    expect(model.config.limit).toEqual({ context: 32768, output: 2048 });
   });
 
   test("rejects duplicate and malformed model IDs", () => {

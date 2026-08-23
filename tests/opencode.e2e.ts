@@ -137,6 +137,10 @@ test("OpenCode lists a discovered model and routes chat to GPUStack", async () =
     expect(models.exitCode).toBe(0);
     expect(models.stdout).toContain("gpustack-e2e/qwen-e2e");
 
+    const debug = await run([binary, "debug", "config"], { env });
+    expect(debug.exitCode).toBe(0);
+    expect(debug.stdout).not.toContain("e2e-key");
+
     const chat = await run(
       [
         binary,

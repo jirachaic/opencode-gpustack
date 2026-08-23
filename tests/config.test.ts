@@ -64,6 +64,58 @@ describe("configuration", () => {
       },
       "positive number",
     ],
+    [
+      "empty limit override",
+      {
+        ...valid,
+        profiles: [
+          {
+            ...valid.profiles[0],
+            modelOverrides: { qwen: { limit: {} } },
+          },
+        ],
+      },
+      "at least one limit",
+    ],
+    [
+      "route ID override",
+      {
+        ...valid,
+        profiles: [
+          {
+            ...valid.profiles[0],
+            modelOverrides: { qwen: { id: "other" } },
+          },
+        ],
+      },
+      "is not supported",
+    ],
+    [
+      "wrong capability type",
+      {
+        ...valid,
+        profiles: [
+          {
+            ...valid.profiles[0],
+            modelOverrides: { qwen: { reasoning: "yes" } },
+          },
+        ],
+      },
+      "must be a boolean",
+    ],
+    [
+      "unknown override field",
+      {
+        ...valid,
+        profiles: [
+          {
+            ...valid.profiles[0],
+            modelOverrides: { qwen: { surprise: true } },
+          },
+        ],
+      },
+      "is not supported",
+    ],
   ])("rejects %s", (_name, input, message) => {
     expect(() => validateConfig(input)).toThrow(message as string);
   });

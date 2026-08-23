@@ -67,6 +67,15 @@ export async function readCache(
 }
 
 export async function listCaches(env = process.env): Promise<CacheSnapshot[]> {
+  const entries = await cacheFiles(env);
+  return entries
+    .map((entry) => entry.snapshot)
+    .filter((value): value is CacheSnapshot => value?.version === 1);
+}
+
+async function cacheFiles(
+  env: NodeJS.ProcessEnv,
+): Promise<Array<{ path: string; snapshot?: CacheSnapshot }>> {
   let names: string[];
   try {
     names = await readdir(cacheDirectory(env));
@@ -74,38 +83,25 @@ export async function listCaches(env = process.env): Promise<CacheSnapshot[]> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
-  const snapshots = await Promise.all(
+  return Promise.all(
     names
       .filter((name) => name.endsWith(".json"))
       .map(async (name) => {
+        const path = join(cacheDirectory(env), name);
         try {
-          return JSON.parse(
-            await readFile(join(cacheDirectory(env), name), "utf8"),
-          ) as CacheSnapshot;
+          return {
+            path,
+            snapshot: JSON.parse(await readFile(path, "utf8")) as CacheSnapshot,
+          };
         } catch {
-          return undefined;
+          return { path };
         }
       }),
-  );
-  return snapshots.filter(
-    (value): value is CacheSnapshot => value?.version === 1,
   );
 }
 
 export async function clearCaches(env = process.env): Promise<number> {
-  const snapshots = await listCaches(env);
-  await Promise.all(
-    snapshots.map((snapshot) =>
-      rm(
-        cachePath(
-          {
-            id: snapshot.profileId,
-            baseURL: snapshot.baseURL,
-          } as GPUStackProfile,
-          env,
-        ),
-      ),
-    ),
-  );
-  return snapshots.length;
+  const entries = await cacheFiles(env);
+  await Promise.all(entries.map((entry) => rm(entry.path)));
+  return entries.length;
 }
