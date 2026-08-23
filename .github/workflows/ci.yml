@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run build
+      - run: bun pm pack --dry-run
+
+  opencode-compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        opencode: ["1.18.21", "latest"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+      - run: bun install --frozen-lockfile
+      - run: bun add --no-save "opencode-ai@${{ matrix.opencode }}"
+      - run: bun run build
+      - run: bun test ./tests/opencode.e2e.ts
+        env:
+          OPENCODE_BIN: ${{ github.workspace }}/node_modules/.bin/opencode

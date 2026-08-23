@@ -1,0 +1,63 @@
+{
+  "name": "opencode-gpustack",
+  "version": "0.1.0",
+  "description": "Automatically discover GPUStack LLMs in OpenCode.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    }
+  },
+  "bin": {
+    "opencode-gpustack": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/cli.ts ./src/types.ts --outdir ./dist --target bun --format esm && tsc -p tsconfig.build.json",
+    "check": "bun run typecheck && bun run lint && bun test",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "bun test",
+    "test:integration": "bun test tests/integration.test.ts",
+    "test:opencode": "bun run build && bun test ./tests/opencode.e2e.ts",
+    "typecheck": "tsc --noEmit",
+    "prepack": "bun run check && bun run build"
+  },
+  "keywords": [
+    "opencode",
+    "gpustack",
+    "llm",
+    "plugin",
+    "model-discovery"
+  ],
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.1.23"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/plugin": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "@opencode-ai/plugin": "^1.1.23",
+    "@types/bun": "^1.2.21",
+    "typescript": "^5.9.2"
+  }
+}
